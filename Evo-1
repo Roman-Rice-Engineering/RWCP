@@ -1,0 +1,50 @@
+#define DATA 9    //Define the digital pin to which the clock line of RWCP is connected
+#define CLOCK 10  //Define the digital pin to which the data line of RWCP is connected
+
+//=====================//
+uint32_t writeDelay = 500;  //How many milliseconds to wait between each digital write while sending a message
+//====================//
+
+void SendStartSignal(){
+  digitalWrite(CLOCK, 1);
+  delay(writeDelay);
+  digitalWrite(DATA, 1);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+
+void SendDataBit(bool dataBit){
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, dataBit);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 1);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendEndSignal(){
+  digitalWrite(DATA, 1);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void setup() {
+  pinMode(DATA, OUTPUT);
+  pinMode(CLOCK, OUTPUT);
+
+//Run Code to Start, Send a '1' bit, and End
+  SendStartSignal();
+  delay(writeDelay);
+  SendDataBit(1);
+  delay(writeDelay);
+  SendEndSignal();
+  
+}
+
+void loop() {}
