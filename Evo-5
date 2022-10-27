@@ -1,0 +1,156 @@
+//For Displaying Data
+#include "Adafruit_LEDBackpack.h"   //Include library for controlling seven seg display
+Adafruit_7segment sevenSeg = Adafruit_7segment();   //Run constructor for seven segment display control library
+
+//For Recieving Data
+#define DATA 9    //Define the digital pin to which the clock line of RWCP is connected
+#define CLOCK 10  //Define the digital pin to which the data line of RWCP is connected
+
+
+//Data Storage Variables
+
+#define BUFFERSIZE 63   //Size of buffer, number of bytes - 1
+
+byte lastReceivedByte;  //The last recieved byte of data will be stored here
+byte receiveBuffer[BUFFERSIZE + 1]; //Up to 64 of the last recieved bytes will be stored here
+
+uint8_t numBitsRead = 0;      //How many bits have been written to lastReadByte since data was last moved to buffer, set 0 as default
+uint8_t currentBufferPos = 0; //Where in the buffer are we, set 0 as default
+
+//Temporary Variables
+bool clockValue;      //Current clock value
+bool oldClockValue;   //Old clock value, from previous time set data function was run
+
+//Data Reading Variables
+bool dataValue;       //Current data value
+bool clockEdgeR;      //True on the rising edge of a clock pulse
+bool clockEdgeF;      //True on the falling edge of a clock pulse
+
+bool transmissionState = false;  //True if a transmission is in progress, set to 0 by default
+
+//For Sending Data
+#define BUTTON 7  //Define the digital pin to which the send message button is connected
+#define DIAL 0    //Define the analog pin to which the message selection dial is connected
+
+//=====================//
+uint32_t writeDelay = 100;  //How many milliseconds to wait between each digital write while sending a message
+//====================//
+
+byte byteToSend;   //This is the variable that will be sent
+
+//Code to Send Data
+void SendStartSignal() {
+  digitalWrite(CLOCK, 1);
+  delay(writeDelay);
+  digitalWrite(DATA, 1);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendDataBit(bool dataBit) {
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, dataBit);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 1);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendEndSignal() {
+  digitalWrite(DATA, 1);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendByte(byte dataByte) {
+  pinMode(DATA, OUTPUT);
+  pinMode(CLOCK, OUTPUT);
+  SendStartSignal();
+  delay(writeDelay);
+  for (int8_t i = 7; i >= 0; i--) {
+    SendDataBit(bitRead(dataByte, i));
+    delay(writeDelay);
+  }
+  SendEndSignal();
+  pinMode(DATA, INPUT);
+  pinMode(CLOCK, INPUT);
+}
+
+//Code to Recieve Data
+void SetData() {
+  dataValue = digitalRead(DATA);
+  clockValue = digitalRead(CLOCK);
+
+  //Detecting if clock value has changed
+  //Assigning correct value to 'clockEdge' variables
+  if (clockValue > oldClockValue) {
+    clockEdgeR = true;
+    clockEdgeF = false;
+  } else if (clockValue < oldClockValue) {
+    clockEdgeR = false;
+    clockEdgeF = true;
+  } else {
+    clockEdgeR = false;
+    clockEdgeF = false;
+  }
+  oldClockValue = clockValue;
+
+  //Change transmission state on start/stop signal
+  //Detecting a high data value during falling edge of clock pulse
+  if (clockEdgeF == true) {
+    if (dataValue == 1) {
+      transmissionState = !transmissionState;
+    }
+  }
+}
+
+void ReadDataValue() {
+  lastReceivedByte = (lastReceivedByte << 1);
+  if (dataValue == 1) {
+    bitSet(lastReceivedByte, 0);
+  } else {
+    bitClear(lastReceivedByte, 0);
+  }
+  if (numBitsRead == 7) {
+    numBitsRead = 0;
+    receiveBuffer[currentBufferPos] = lastReceivedByte;
+    if (currentBufferPos < BUFFERSIZE) {
+      currentBufferPos++;
+    } else {
+      currentBufferPos = 0;
+    }
+  } else {
+    numBitsRead++;
+  }
+}
+
+void setup() {
+  pinMode(DATA, INPUT);
+  pinMode(CLOCK, INPUT);
+  pinMode(BUTTON, INPUT_PULLUP);
+  sevenSeg.begin(0x70);   //Begin communicating to seven seg display brekout board at its default address
+}
+
+void loop() {
+  SetData();
+  if (transmissionState == true) {
+    if (clockEdgeR == true) {
+      ReadDataValue();
+    }
+  }
+  if (currentBufferPos != 0) {
+    sevenSeg.print(receiveBuffer[currentBufferPos - 1], DEC);
+  } else {
+    sevenSeg.print(receiveBuffer[BUFFERSIZE], DEC);
+  }
+  sevenSeg.writeDisplay();
+  byteToSend = round(analogRead(DIAL) / 4);
+  if (digitalRead(BUTTON) == LOW) {
+    SendByte(byteToSend);
+  }
+}
