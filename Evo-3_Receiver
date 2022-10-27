@@ -1,0 +1,71 @@
+#include "Adafruit_LEDBackpack.h"   //Include library for controlling seven seg display
+
+#define DATA 9    //Define the digital pin to which the clock line of RWCP is connected
+#define CLOCK 10  //Define the digital pin to which the data line of RWCP is connected
+
+Adafruit_7segment sevenSeg = Adafruit_7segment();   //Run constructor for seven segment display control library
+
+byte lastReceivedByte;  //The last recieved byte of data will be stored here
+
+bool clockValue;      //Current clock value
+bool oldClockValue;   //Old clock value, from previous time set data function was run
+
+bool dataValue;       //Current data value
+bool clockEdgeR;      //True on the rising edge of a clock pulse
+bool clockEdgeF;      //True on the falling edge of a clock pulse
+
+bool transmissionState = false;  //True if a transmission is in progress, set to 0 by default
+
+void SetData() {
+  dataValue = digitalRead(DATA);
+  clockValue = digitalRead(CLOCK);
+
+  //Detecting if clock value has changed
+  //Assigning correct value to 'clockEdge' variables
+  if (clockValue > oldClockValue) {
+    clockEdgeR = true;
+    clockEdgeF = false;
+  } else if (clockValue < oldClockValue) {
+    clockEdgeR = false;
+    clockEdgeF = true;
+  } else {
+    clockEdgeR = false;
+    clockEdgeF = false;
+  }
+  oldClockValue = clockValue;
+
+  //Change transmission state on start/stop signal
+  //Detecting a high data value during falling edge of clock pulse
+  if (clockEdgeF == true) {
+    if (dataValue == 1) {
+      transmissionState = !transmissionState;
+    }
+  }
+}
+
+void ReadDataValue() {
+  lastReceivedByte = (lastReceivedByte << 1);
+  if (dataValue == 1) {
+    bitSet(lastReceivedByte, 0);
+  } else {
+    bitClear(lastReceivedByte, 0);
+  }
+}
+
+void setup() {
+  pinMode(DATA, INPUT);
+  pinMode(CLOCK, INPUT);
+  sevenSeg.begin(0x70);   //Begin communicating to seven seg display brekout board at its default address
+}
+
+void loop() {
+  SetData();
+  if (transmissionState == true) {
+    if (clockEdgeR == true) {
+      ReadDataValue();
+    }
+  }
+
+  sevenSeg.print(lastReceivedByte, DEC);
+  sevenSeg.writeDisplay();
+}
