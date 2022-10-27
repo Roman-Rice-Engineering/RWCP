@@ -1,0 +1,69 @@
+#include "Adafruit_LEDBackpack.h"   //Include library for controlling seven seg display
+
+#define DATA 9    //Define the digital pin to which the clock line of RWCP is connected
+#define CLOCK 10  //Define the digital pin to which the data line of RWCP is connected
+
+#define BUTTON 7  //Define the digital pin to which the send message button is connected
+#define DIAL 0    //Define the analog pin to which the message selection dial is connected
+
+Adafruit_7segment sevenSeg = Adafruit_7segment();   //Run constructor for seven segment display control library
+
+//=====================//
+uint32_t writeDelay = 100;  //How many milliseconds to wait between each digital write while sending a message
+//====================//
+
+byte byteToSend;   //This is the variable that will be sent
+
+void SendStartSignal() {
+  digitalWrite(CLOCK, 1);
+  delay(writeDelay);
+  digitalWrite(DATA, 1);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendDataBit(bool dataBit) {
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, dataBit);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 1);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendEndSignal() {
+  digitalWrite(DATA, 1);
+  delay(writeDelay);
+  digitalWrite(CLOCK, 0);
+  delay(writeDelay);
+  digitalWrite(DATA, 0);
+}
+
+void SendByte(byte dataByte) {
+  SendStartSignal();
+  delay(writeDelay);
+  for (int8_t i = 7; i >= 0; i--) {
+    SendDataBit(bitRead(dataByte, i));
+    delay(writeDelay);
+  }
+  SendEndSignal();
+}
+
+void setup() {
+  pinMode(DATA, OUTPUT);
+  pinMode(CLOCK, OUTPUT);
+  pinMode(BUTTON, INPUT_PULLUP);
+  sevenSeg.begin(0x70);   //Begin communicating to seven seg display brekout board at its default address
+}
+
+void loop() {
+  byteToSend = round(analogRead(DIAL) / 4);
+  sevenSeg.print(byteToSend, DEC);
+  sevenSeg.writeDisplay();
+  if (digitalRead(BUTTON) == LOW) {
+    SendByte(byteToSend);
+  }
+}
